@@ -31,6 +31,27 @@ Example:
 python githubfetch.py torvalds
 ```
 
+## Terminal Alias (optional)
+
+Add an alias so you can run it from anywhere as `githubfetch <username>`:
+
+**Bash** (`~/.bashrc`):
+```bash
+echo "alias githubfetch='python3 $(pwd)/githubfetch.py'" >> ~/.bashrc
+source ~/.bashrc
+```
+
+**Zsh** (`~/.zshrc`):
+```bash
+echo "alias githubfetch='python3 $(pwd)/githubfetch.py'" >> ~/.zshrc
+source ~/.zshrc
+```
+
+Then use it:
+```bash
+githubfetch torvalds
+```
+
 ## Example Output
 ![example image](screenshot.png)
 
