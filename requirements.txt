@@ -1,4 +1,4 @@
 # Pinned lower bounds with a compatible upper bound.
 # For a fully reproducible install with hashes, use requirements.lock.
 requests>=2.31.0,<3
-Pillow>=10.0.1,<12
+Pillow>=12.3.0,<13
