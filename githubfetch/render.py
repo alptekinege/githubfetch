@@ -27,10 +27,44 @@ from .sanitize import (
 )
 
 SEP = " │ "
+SEP_ASCII = " | "
 DEFAULT_AVATAR_SIZE = 18
 MIN_AVATAR_SIZE = 6
 MIN_INFO_WIDTH = 20
 FALLBACK_TERMINAL_WIDTH = 80
+
+# Glyphs that a legacy Windows code page (cp1252, cp437) cannot encode.
+_UNICODE_PROBE = "│⭐—██░▒▓"
+
+
+def configure_stdout() -> None:
+    """Ask stdout for UTF-8 so box characters survive a legacy console.
+
+    Windows terminals still default to a legacy code page, where printing the
+    separator or the star emoji raises ``UnicodeEncodeError``. Reconfiguring is
+    best-effort; :func:`output_is_unicode_safe` decides the fallback if it fails.
+    """
+    for stream in (sys.stdout, sys.stderr):
+        reconfigure = getattr(stream, "reconfigure", None)
+        if reconfigure is None:
+            continue
+        try:
+            reconfigure(encoding="utf-8", errors="replace")
+        except Exception:  # noqa: S110 - best-effort; fallback handles failure
+            # Some consoles and wrapped streams refuse reconfiguration. That is
+            # fine: output_is_unicode_safe() then selects the ASCII fallback.
+            pass
+
+
+def output_is_unicode_safe(stream: Any = None) -> bool:
+    """True if *stream* can encode the glyphs the card is drawn with."""
+    stream = stream if stream is not None else sys.stdout
+    encoding = getattr(stream, "encoding", None) or "ascii"
+    try:
+        _UNICODE_PROBE.encode(encoding)
+    except (LookupError, UnicodeEncodeError):
+        return False
+    return True
 
 
 class Palette:
@@ -155,10 +189,14 @@ def load_avatar(data: bytes, size: int):
         return None
 
 
-def image_to_rows(img: Any, palette: Palette) -> list[str]:
-    """Render an image as rows of double-width true-color blocks."""
+def image_to_rows(img: Any, palette: Palette, unicode_ok: bool = True) -> list[str]:
+    """Render an image as rows of double-width blocks."""
     if img is None:
         return []
+    # Shade ramp for monochrome output, darkest to lightest.
+    ramp = ("  ", "░░", "▒▒", "▓▓", "██") if unicode_ok else ("  ", "..", "::", "oo", "##")
+    block = "██" if unicode_ok else "##"
+
     rows: list[str] = []
     width, height = img.size
     pixels = img.load()
@@ -167,11 +205,10 @@ def image_to_rows(img: Any, palette: Palette) -> list[str]:
         for x in range(width):
             r, g, b = pixels[x, y][:3]
             if palette.enabled:
-                parts.append(f"{palette.truecolor(r, g, b)}██{palette.RESET}")
+                parts.append(f"{palette.truecolor(r, g, b)}{block}{palette.RESET}")
             else:
-                # Monochrome fallback: shade by luminance.
                 lum = (0.2126 * r + 0.7152 * g + 0.0722 * b) / 255
-                parts.append("  ░░▒▒▓▓██"[int(lum * 4) * 2 : int(lum * 4) * 2 + 2])
+                parts.append(ramp[min(4, int(lum * 5))])
         rows.append("".join(parts))
     return rows
 
@@ -200,7 +237,12 @@ def top_repos(repos: Iterable[dict], count: int = 5) -> list[dict]:
 
 
 def build_info_lines(
-    user: dict, repos: Sequence[dict], info_width: int, palette: Palette, repo_count: int = 5
+    user: dict,
+    repos: Sequence[dict],
+    info_width: int,
+    palette: Palette,
+    repo_count: int = 5,
+    unicode_ok: bool = True,
 ) -> list[str]:
     """Every value here is sanitized: nothing remote is emitted verbatim."""
     lines: list[str] = []
@@ -240,17 +282,19 @@ def build_info_lines(
             palette.paint(palette.MAGENTA, truncate_display("Top Repositories:", info_width))
         )
         for repo in selected:
-            lines.append(_repo_line(repo, info_width, palette))
+            lines.append(_repo_line(repo, info_width, palette, unicode_ok))
     return lines
 
 
-def _repo_line(repo: dict, info_width: int, palette: Palette) -> str:
+def _repo_line(
+    repo: dict, info_width: int, palette: Palette, unicode_ok: bool = True
+) -> str:
     stars = repo.get("stargazers_count", 0)
     stars = stars if isinstance(stars, int) else 0
     name = sanitize_text(repo.get("name") or "N/A", MAX_REPO_NAME)
     desc = sanitize_text(repo.get("description") or "", MAX_REPO_DESC)
 
-    prefix = "⭐ "
+    prefix = "⭐ " if unicode_ok else "* "
     suffix = f" ({stars})"
     fixed_w = display_width(prefix) + display_width(suffix)
 
@@ -266,7 +310,7 @@ def _repo_line(repo: dict, info_width: int, palette: Palette) -> str:
     if not desc:
         return painted
 
-    sep = " — "
+    sep = " — " if unicode_ok else " - "
     remaining = info_width - display_width(header) - display_width(sep)
     if remaining <= 0:
         return painted
@@ -281,9 +325,10 @@ def render_card(
     avatar_cols: int,
     info_width: int,
     palette: Palette,
+    unicode_ok: bool = True,
 ) -> str:
     """Compose the final card. Returns the whole thing as one string."""
-    sep = SEP if avatar_cols else ""
+    sep = (SEP if unicode_ok else SEP_ASCII) if avatar_cols else ""
     total = avatar_cols + display_width(sep) + info_width
     blank_avatar = " " * avatar_cols
 

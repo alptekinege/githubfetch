@@ -24,9 +24,11 @@ from .render import (
     build_json_payload,
     color_enabled,
     compute_layout,
+    configure_stdout,
     enable_ansi_colors,
     image_to_rows,
     load_avatar,
+    output_is_unicode_safe,
     render_card,
     terminal_width,
 )
@@ -82,6 +84,7 @@ def build_parser() -> argparse.ArgumentParser:
 
 def run(argv: list[str] | None = None) -> int:
     args = build_parser().parse_args(argv)
+    configure_stdout()
 
     username = args.username.strip()
     if not username or len(username) > 39 or not all(
@@ -110,13 +113,17 @@ def run(argv: list[str] | None = None) -> int:
         session.close()
 
     if args.json:
-        print(json.dumps(build_json_payload(user, repos, repo_count), indent=2, ensure_ascii=False))
+        payload = build_json_payload(user, repos, repo_count)
+        # ensure_ascii only when the console cannot encode the real characters.
+        print(json.dumps(payload, indent=2, ensure_ascii=not output_is_unicode_safe()))
         return 0
 
     use_color = color_enabled(force_off=args.no_color)
     if use_color:
         enable_ansi_colors()
     palette = Palette(use_color)
+    # A legacy Windows code page cannot encode the box/star glyphs.
+    unicode_ok = output_is_unicode_safe()
 
     width = args.width if args.width > 0 else terminal_width()
     show_avatar = not args.no_avatar
@@ -135,7 +142,9 @@ def run(argv: list[str] | None = None) -> int:
             avatar_session = build_session(None, retries=retries)
             try:
                 data = download_avatar_bytes(avatar_session, avatar_url)
-                avatar_rows = image_to_rows(load_avatar(data, avatar_size), palette)
+                avatar_rows = image_to_rows(
+                    load_avatar(data, avatar_size), palette, unicode_ok
+                )
             except GitHubError as exc:
                 print(f"Warning: {redact(exc, token)}", file=sys.stderr)
             finally:
@@ -145,8 +154,12 @@ def run(argv: list[str] | None = None) -> int:
     if not avatar_rows:
         _, info_width = compute_layout(width, 0, False)
 
-    info_lines = build_info_lines(user, repos, info_width, palette, repo_count)
-    print(render_card(user, repos, avatar_rows, info_lines, avatar_cols, info_width, palette))
+    info_lines = build_info_lines(user, repos, info_width, palette, repo_count, unicode_ok)
+    print(
+        render_card(
+            user, repos, avatar_rows, info_lines, avatar_cols, info_width, palette, unicode_ok
+        )
+    )
     return 0
 
 

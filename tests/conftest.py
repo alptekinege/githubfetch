@@ -52,3 +52,48 @@ def repos_payload() -> list[dict]:
 def clean_env(monkeypatch):
     for var in ("GITHUB_TOKEN", "GH_TOKEN", "NO_COLOR", "COLUMNS", "TERM"):
         monkeypatch.delenv(var, raising=False)
+
+
+@pytest.fixture
+def hostile_server_factory(user_payload, repos_payload):
+    """Serve a profile over local HTTP and return its base URL.
+
+    Used by tests that need to drive the real CLI as a subprocess. Defaults to
+    a benign profile; pass overrides to make it hostile.
+    """
+    import json
+    import threading
+    from http.server import BaseHTTPRequestHandler, HTTPServer
+
+    servers = []
+
+    def factory(user: dict | None = None, repos: list | None = None) -> str:
+        served_user = dict(user_payload)
+        served_user["login"] = "victim"
+        if user:
+            served_user.update(user)
+        served_repos = repos if repos is not None else repos_payload
+
+        class Handler(BaseHTTPRequestHandler):
+            def do_GET(self):  # noqa: N802
+                payload = served_repos if "/repos" in self.path else served_user
+                body = json.dumps(payload).encode()
+                self.send_response(200)
+                self.send_header("Content-Type", "application/json")
+                self.send_header("Content-Length", str(len(body)))
+                self.end_headers()
+                self.wfile.write(body)
+
+            def log_message(self, *args):
+                pass
+
+        server = HTTPServer(("127.0.0.1", 0), Handler)
+        threading.Thread(target=server.serve_forever, daemon=True).start()
+        servers.append(server)
+        return f"http://127.0.0.1:{server.server_address[1]}"
+
+    yield factory
+
+    for server in servers:
+        server.shutdown()
+        server.server_close()
