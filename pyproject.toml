@@ -10,7 +10,7 @@ readme = "README.md"
 requires-python = ">=3.9"
 license = { text = "Unlicense" }
 dependencies = [
-    "requests>=2.31.0,<3",
+    "requests>=2.34.2,<3",
     "Pillow>=10.0.1,<12",
 ]
 
