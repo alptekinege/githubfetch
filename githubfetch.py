@@ -8,6 +8,7 @@ import os
 import sys
 import io
 import textwrap
+import shutil
 from datetime import datetime
 import requests
 from PIL import Image
@@ -149,9 +150,26 @@ def main():
     # Fetch data
     user_data, repos_data = fetch_github_data(username)
 
-    # Avatar processing
+    # Layout dimensions — compute available width so long text never
+    # wraps in the terminal and splits the avatar image.
+    SEP = " │ "
+    # Prefer COLUMNS env var (set by most shells), fall back to TTY size.
+    try:
+        terminal_width = int(os.environ.get("COLUMNS", 0)) or shutil.get_terminal_size().columns
+    except (ValueError, OSError):
+        terminal_width = shutil.get_terminal_size().columns
+
+    # Shrink avatar if terminal is too narrow to fit avatar + separator + info
+    AVATAR_SIZE = 18  # pixels, each renders as 2 terminal columns
+    MIN_INFO = 20
+    if terminal_width < AVATAR_SIZE * 2 + len(SEP) + MIN_INFO:
+        AVATAR_SIZE = max(6, (terminal_width - len(SEP) - MIN_INFO) // 2)
+    AVATAR_W = AVATAR_SIZE * 2  # chars
+    INFO_WIDTH = max(10, terminal_width - AVATAR_W - len(SEP))
+
+    # Avatar processing — download at the size determined by terminal width
     avatar_url = user_data.get("avatar_url", "")
-    avatar_img = download_avatar(avatar_url)
+    avatar_img = download_avatar(avatar_url, size=AVATAR_SIZE)
     avatar_rows = image_to_ascii(avatar_img, Color.RESET)
 
     # Build profile info lines
@@ -159,7 +177,8 @@ def main():
 
     def add_field(label, value, color):
         raw = str(value).replace("\n", " ")
-        wrapped = wrap_text(raw, 50) or [""]
+        wrap_w = max(1, INFO_WIDTH - len(label) - 1)
+        wrapped = wrap_text(raw, wrap_w) or [""]
         info_lines.append(Color.paint(color, f"{label} {wrapped[0]}".rstrip()))
         indent = " " * (len(label) + 1)
         for w in wrapped[1:]:
@@ -179,26 +198,64 @@ def main():
     top_repos = get_top_repos(repos_data, 5)
     if top_repos:
         info_lines.append("")
-        info_lines.append(Color.paint(Color.MAGENTA, "Top Repositories:"))
+        repos_title = "Top Repositories:"
+        if len(repos_title) > INFO_WIDTH:
+            repos_title = repos_title[:INFO_WIDTH]
+        info_lines.append(Color.paint(Color.MAGENTA, repos_title))
         for repo in top_repos:
             stars = repo.get("stargazers_count", 0)
             name = repo.get("name", "N/A")
             desc = repo.get("description") or "No description"
-            if len(desc) > 50:
-                desc = desc[:47] + "..."
-            info_lines.append(
-                f"{Color.YELLOW}⭐ {name} ({stars}){Color.RESET} — {desc}"
-            )
+
+            # ⭐ emoji is 1 Python char but renders as 2 terminal columns
+            header = f"⭐ {name} ({stars})"
+            header_width = len(header) + 1  # +1 for emoji double-width
+
+            if header_width >= INFO_WIDTH:
+                # Header itself is too long — truncate name to fit
+                fixed_w = 3 + 2 + len(str(stars)) + 1  # "⭐ " + " (" + stars + ")"
+                name_avail = INFO_WIDTH - fixed_w
+                if name_avail > 3:
+                    name = name[:name_avail - 3] + "..."
+                else:
+                    name = "..."
+                info_lines.append(f"{Color.YELLOW}⭐ {name} ({stars}){Color.RESET}")
+            else:
+                sep_str = " — "
+                desc_avail = INFO_WIDTH - header_width - len(sep_str)
+                if desc_avail <= 0:
+                    # No room for description at all — just show header
+                    info_lines.append(
+                        f"{Color.YELLOW}⭐ {name} ({stars}){Color.RESET}"
+                    )
+                elif desc_avail <= 3:
+                    # Very little room — show what fits, no ellipsis
+                    info_lines.append(
+                        f"{Color.YELLOW}⭐ {name} ({stars}){Color.RESET}"
+                        f"{sep_str}{desc[:desc_avail]}"
+                    )
+                elif len(desc) > desc_avail:
+                    info_lines.append(
+                        f"{Color.YELLOW}⭐ {name} ({stars}){Color.RESET}"
+                        f"{sep_str}{desc[:desc_avail - 3]}..."
+                    )
+                else:
+                    info_lines.append(
+                        f"{Color.YELLOW}⭐ {name} ({stars}){Color.RESET}"
+                        f"{sep_str}{desc}"
+                    )
 
     # Print side-by-side
-    AVATAR_W = 36  # 18 * 2 chars for "██"
     BLANK_AVTR = " " * AVATAR_W
-    SEP = " │ "
+    total_width = AVATAR_W + len(SEP) + INFO_WIDTH
 
     print()
-    print("=" * 80)
-    print(Color.paint(Color.CYAN, f"GitHub Profile Card - @{username}"))
-    print("=" * 80)
+    print("=" * total_width)
+    card_title = f"GitHub Profile Card - @{username}"
+    if len(card_title) > total_width:
+        card_title = card_title[:total_width]
+    print(Color.paint(Color.CYAN, card_title))
+    print("=" * total_width)
     print()
 
     max_lines = max(len(avatar_rows), len(info_lines))
@@ -208,7 +265,7 @@ def main():
         print(f"{left}{SEP}{right}")
 
     print()
-    print("=" * 80)
+    print("=" * total_width)
     print()
 
 

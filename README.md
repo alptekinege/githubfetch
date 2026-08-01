@@ -7,6 +7,7 @@ A neofetch-like program for GitHub profiles. Shows user avatar as true-color ASC
 - Profile information (name, bio, location, stats)
 - Top 5 repositories sorted by stars
 - Cross-platform support (Windows, Linux, macOS)
+- Responsive layout — adapts to terminal width, shrinks avatar and wraps/truncates text to prevent the avatar from splitting
 
 ## Requirements
 - Python 3.7+
