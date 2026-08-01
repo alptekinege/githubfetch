@@ -1,0 +1,54 @@
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "githubfetch"
+version = "0.2.0"
+description = "A neofetch-like CLI that renders a GitHub profile in the terminal."
+readme = "README.md"
+requires-python = ">=3.9"
+license = { text = "Unlicense" }
+dependencies = [
+    "requests>=2.31.0,<3",
+    "Pillow>=10.0.1,<12",
+]
+
+[project.optional-dependencies]
+dev = [
+    "pytest>=8.0",
+    "responses>=0.25",
+    "ruff>=0.6",
+    "mypy>=1.11",
+    "types-requests",
+]
+
+[project.scripts]
+githubfetch = "githubfetch.cli:main"
+
+[tool.setuptools]
+packages = ["githubfetch"]
+py-modules = []
+
+[tool.ruff]
+line-length = 100
+target-version = "py39"
+
+[tool.ruff.lint]
+select = ["E", "F", "W", "I", "UP", "B", "S"]
+ignore = ["S101", "E501"]
+
+[tool.ruff.lint.per-file-ignores]
+"tests/*" = ["S", "E402"]
+"githubfetch.py" = ["E402"]
+
+[tool.mypy]
+# Not pinned to 3.9: recent mypy refuses that target. Runtime 3.9 compatibility
+# is covered by the AST feature-version check in tests/test_compat.py.
+warn_unused_ignores = false
+ignore_missing_imports = true
+files = ["githubfetch"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+addopts = "-q"
