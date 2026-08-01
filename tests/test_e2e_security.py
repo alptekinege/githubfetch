@@ -79,11 +79,16 @@ def test_hostile_profile_is_inert_end_to_end(hostile_server):
     err = result.stderr.decode(errors="replace")
     out = raw.decode(errors="replace")
 
+    # Windows translates "\n" to "\r\n" on write, so normalize line endings
+    # before checking for CR. A *bare* CR is the injection vector (it moves the
+    # cursor to column 0 and overwrites the line); CRLF terminators are not.
+    normalized = raw.replace(b"\r\n", b"\n")
+
     # Nothing executable reaches the terminal.
     assert b"\x1b" not in raw, "ESC leaked to stdout"
     assert b"\xc2\x9b" not in raw, "C1 CSI leaked to stdout"
     assert b"\x07" not in raw, "BEL leaked to stdout"
-    assert b"\x0d" not in raw, "CR leaked to stdout"
+    assert b"\r" not in normalized, "bare CR leaked to stdout"
     assert b"\x00" not in raw
     assert "\u202e".encode() not in raw, "bidi override leaked to stdout"
 
