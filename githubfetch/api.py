@@ -59,9 +59,13 @@ def redact(text: object, token: str | None = None) -> str:
     if token:
         out = out.replace(token, "***REDACTED***")
     out = _TOKEN_PATTERN.sub("***REDACTED***", out)
-    # Never echo an Authorization header value back to the terminal.
+    # Never echo an Authorization header value back to the terminal. Redact
+    # everything after "Authorization:" to the end of the line - scheme and
+    # credential together, whatever the scheme (Bearer, Basic, Digest...), so
+    # a redaction cannot stop at the scheme name and leak the credential, nor
+    # leak multi-token values like Digest parameters.
     out = re.sub(
-        r"(?i)(authorization[\"']?\s*[:=]\s*[\"']?)(bearer|token)?\s*\S+",
+        r"(?i)(authorization[\"']?\s*[:=]\s*[\"']?)[^\n\r]*",
         r"\1***REDACTED***",
         out,
     )

@@ -46,6 +46,13 @@ def test_sanitize_strips_every_control_character():
     assert sanitize_text(CONTROL_CHARS) == ""
 
 
+def test_sanitize_strips_bidi_format_controls():
+    """Cf bidi marks outside the common LRE/RLE set must also be dropped."""
+    assert sanitize_text("evil\u061ctext") == "eviltext"  # Arabic Letter Mark
+    assert sanitize_text("a\u08e2b") == "ab"  # Arabic Disputed End of Ayah
+    assert "\u061c" not in sanitize_text("x" * 50 + "\u061c" * 50)
+
+
 def test_sanitize_preserves_normal_text():
     assert sanitize_text("Hello, World! 123 — ok") == "Hello, World! 123 — ok"
 
