@@ -67,6 +67,29 @@ def test_redact_scrubs_authorization_header():
     assert "abc123xyz" not in out
 
 
+def test_redact_scrubs_basic_authorization_header():
+    """Any auth scheme, not just Bearer/Token, must not leak its credential."""
+    out = redact("Authorization: Basic dXNlcjpwYXNz")
+    assert "dXNlcjpwYXNz" not in out
+    assert "Basic" not in out
+
+
+def test_redact_scrubs_arbitrary_auth_scheme():
+    out = redact("authorization = \"Digest realm=example, nonce=deadbeef\"")
+    assert "nonce=deadbeef" not in out
+    assert "Digest" not in out
+
+
+def test_redact_preserves_text_before_header_and_other_lines():
+    out = redact("Error 401: Authorization: Bearer abc123 rejected")
+    assert "abc123" not in out
+    assert "Error 401:" in out
+    multiline = redact("GET /users HTTP/1.1\nAuthorization: Bearer abc123\nAccept: */*")
+    assert "abc123" not in multiline
+    assert "GET /users HTTP/1.1" in multiline
+    assert "Accept: */*" in multiline
+
+
 # ───────────────────────────── user fetch ───────────────────────────────────
 @responses.activate
 def test_fetch_user_ok(user_payload):

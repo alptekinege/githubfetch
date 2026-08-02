@@ -35,6 +35,7 @@ _ZERO_WIDTH_AND_BIDI = frozenset(
     "\u202a\u202b\u202c\u202d\u202e"  # LRE, RLE, PDF, LRO, RLO
     "\u2060\u2061\u2062\u2063\u2064"  # word joiner + invisible operators
     "\u2066\u2067\u2068\u2069"  # LRI, RLI, FSI, PDI
+    "\u061c\u08e2"  # Arabic Letter Mark, Arabic Disputed End of Ayah
     "\ufeff"  # BOM / ZWNBSP
 )
 
